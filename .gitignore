@@ -103,3 +103,4 @@ data/processed/
 # Coverage reports
 coverage/
 *.lcov
+manifests/base/postgres/secret.yaml
