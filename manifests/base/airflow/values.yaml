@@ -50,3 +50,13 @@ redis:
 # Use secret for database connection
 data:
   metadataSecretName: airflow-metadata-secret
+
+# GitSync to load DAGs from our Git repository
+dags:
+  gitSync:
+    enabled: true
+    repo: https://github.com/sanaggar/sanaggar-crypto-data-platform.git
+    branch: main
+    subPath: "dags"
+    wait: 60
+    credentialsSecret: airflow-git-secret
