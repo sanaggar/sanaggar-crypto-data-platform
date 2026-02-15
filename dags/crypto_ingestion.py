@@ -85,16 +85,18 @@ def insert_to_database(**context):
     
     logging.info(f"Successfully inserted {inserted_count} records into raw.crypto_prices")
     
+    # Push count to XCom
+    ti.xcom_push(key="inserted_count", value=inserted_count)
+    
     return inserted_count
 
 
 def log_success(**context):
     """Log successful completion of the pipeline."""
     ti = context["ti"]
-    inserted_count = ti.xcom_pull(task_ids="insert_to_db")
+    inserted_count = ti.xcom_pull(key="inserted_count", task_ids="insert_to_db")
     
-    execution_date = context["execution_date"]
-    logging.info(f"Pipeline completed successfully at {execution_date}")
+    logging.info(f"Pipeline completed successfully!")
     logging.info(f"Total records inserted: {inserted_count}")
 
 
