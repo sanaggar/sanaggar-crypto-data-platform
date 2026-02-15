@@ -1,0 +1,52 @@
+# Airflow Helm Chart Values
+# NOTE: Sensitive values are stored in secret.yaml (not in git)
+# NOTE: Admin user must be created manually after installation (see README)
+
+# Use Kubernetes executor (each task runs as a separate pod)
+executor: "KubernetesExecutor"
+
+# Web interface
+webserver:
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  # Disable default user - we create it manually with credentials from secret
+  defaultUser:
+    enabled: false
+
+# Scheduler
+scheduler:
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+# Disable example DAGs
+extraEnv: |
+  - name: AIRFLOW__CORE__LOAD_EXAMPLES
+    value: "False"
+
+# Expose web interface
+service:
+  type: ClusterIP
+
+# Disable internal PostgreSQL - we use our existing one
+postgresql:
+  enabled: false
+
+# Disable Redis (not needed with KubernetesExecutor)
+redis:
+  enabled: false
+
+# Use secret for database connection
+data:
+  metadataSecretName: airflow-metadata-secret

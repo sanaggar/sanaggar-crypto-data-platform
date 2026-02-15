@@ -48,8 +48,8 @@ kubectl get applications -n argocd
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| ArgoCD | http://localhost:8080 | admin / (see below) |
-| Airflow | http://localhost:8081 | admin / admin |
+| ArgoCD | http://localhost:8081 | admin / (see below) |
+| Airflow | http://localhost:8080 (port-forward) | admin / (created manually, see README) |
 | API | http://localhost:8000 | - |
 | Dashboard | http://localhost:8501 | - |
 | Grafana | http://localhost:3000 | admin / admin |
@@ -69,8 +69,9 @@ If you prefer to set up components manually:
 
 ```bash
 k3d cluster create crypto-platform \
-  --port "8080:80@loadbalancer" \
+  --port "8081:80@loadbalancer" \
   --port "8443:443@loadbalancer" \
+  --port "5432:5432@loadbalancer" \
   --agents 2
 ```
 
