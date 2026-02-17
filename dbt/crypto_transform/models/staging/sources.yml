@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw
+    database: crypto_data
+    schema: raw
+    tables:
+      - name: crypto_prices
+        description: "Raw cryptocurrency prices from CoinGecko API"
+        columns:
+          - name: id
+            description: "Primary key"
+          - name: coin_id
+            description: "Cryptocurrency identifier (bitcoin, ethereum, etc.)"
+          - name: data
+            description: "JSON data from API containing prices, market cap, etc."
+          - name: ingested_at
+            description: "Timestamp when data was ingested"

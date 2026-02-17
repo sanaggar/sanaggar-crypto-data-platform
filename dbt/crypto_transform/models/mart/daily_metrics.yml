@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: daily_metrics
+    description: "Daily aggregated cryptocurrency metrics"
+    columns:
+      - name: coin_id
+        description: "Cryptocurrency identifier"
+        tests:
+          - not_null
+      - name: price_date
+        description: "Date of the metrics"
+        tests:
+          - not_null
+      - name: num_records
+        description: "Number of price records for that day"
+      - name: avg_price_usd
+        description: "Average USD price for the day"
+        tests:
+          - not_null
+      - name: min_price_usd
+        description: "Minimum USD price for the day"
+      - name: max_price_usd
+        description: "Maximum USD price for the day"
+      - name: latest_market_cap_usd
+        description: "Market cap from the most recent record"
+      - name: latest_volume_24h_usd
+        description: "24h volume from the most recent record"
+      - name: latest_change_24h_pct
+        description: "24h change percentage from the most recent record"

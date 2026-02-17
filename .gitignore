@@ -107,3 +107,5 @@ manifests/base/postgres/secret.yaml
 manifests/base/airflow/secret.yaml
 manifests/base/airflow/webserver-secret.yaml
 manifests/base/airflow/git-secret.yaml
+dbt/crypto_transform/profiles/profiles.yml
+dbt/crypto_transform/profiles/.user.yml

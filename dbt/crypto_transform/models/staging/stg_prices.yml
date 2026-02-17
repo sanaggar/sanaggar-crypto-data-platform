@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_prices
+    description: "Staged cryptocurrency prices with extracted and typed columns"
+    columns:
+      - name: id
+        description: "Primary key"
+        tests:
+          - unique
+          - not_null
+      - name: coin_id
+        description: "Cryptocurrency identifier"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['bitcoin', 'ethereum', 'solana', 'cardano', 'polkadot']
+      - name: price_usd
+        description: "Price in USD"
+        tests:
+          - not_null
+      - name: price_eur
+        description: "Price in EUR"
+        tests:
+          - not_null
+      - name: market_cap_usd
+        description: "Market capitalization in USD"
+      - name: change_24h_pct
+        description: "24-hour price change percentage"
+      - name: ingested_at
+        description: "When the data was ingested"
+        tests:
+          - not_null

@@ -1,0 +1,12 @@
+crypto_transform:
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: your_username
+      password: "{{ env_var('DBT_POSTGRES_PASSWORD') }}"
+      dbname: crypto_data
+      schema: staging
+      threads: 4
+  target: dev

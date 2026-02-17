@@ -1,0 +1,21 @@
+name: 'crypto_transform'
+version: '1.0.0'
+
+profile: 'crypto_transform'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  crypto_transform:
+    staging:
+      +schema: staging
+      +materialized: view
+    mart:
+      +schema: mart
+      +materialized: table
