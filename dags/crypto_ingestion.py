@@ -95,7 +95,7 @@ with DAG(
     dag_id="crypto_ingestion",
     default_args=default_args,
     description="Ingest top 100 cryptocurrency prices from CoinGecko",
-    schedule_interval="@hourly",
+    schedule="@hourly",
     start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=["coingecko", "crypto", "ingestion"],
