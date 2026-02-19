@@ -27,67 +27,71 @@ default_args = {
 }
 
 
-def fetch_crypto_prices(**context):
-    """Fetch top 100 cryptocurrencies from CoinGecko API."""
+def fetch_and_store_crypto_prices(**context):
+    """Fetch top 100 cryptocurrencies from CoinGecko and insert into PostgreSQL.
+
+    Fetch and insert are combined in a single task to avoid pushing large
+    payloads (100 coins) through XCom, which can exceed the metadata DB
+    size limit and cause silent failures.
+    """
     logging.info(f"Fetching top {TOP_N_COINS} cryptocurrencies by market cap")
-    
+
     url = f"{COINGECKO_API_URL}/coins/markets"
-    params = {
-        "vs_currency": "usd",
-        "order": "market_cap_desc",
-        "per_page": TOP_N_COINS,
-        "page": 1,
-        "sparkline": False,
-        "price_change_percentage": "24h"
-    }
-    
-    response = requests.get(url, params=params, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    
-    logging.info(f"Successfully fetched data for {len(data)} coins")
-    logging.info(f"Top 5: {[coin['id'] for coin in data[:5]]}")
-    
-    context["ti"].xcom_push(key="crypto_data", value=data)
-    return data
+    all_data = []
 
+    per_page = 50
+    for page in range(1, (TOP_N_COINS // per_page) + 1):
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "per_page": per_page,
+            "page": page,
+            "sparkline": False,
+            "price_change_percentage": "24h",
+        }
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        all_data.extend(response.json())
+        logging.info(f"Fetched page {page} ({len(all_data)} coins so far)")
 
-def insert_to_database(**context):
-    """Insert fetched data into PostgreSQL raw schema."""
-    ti = context["ti"]
-    data = ti.xcom_pull(key="crypto_data", task_ids="fetch_prices")
-    
-    if not data:
-        raise ValueError("No data received from fetch_prices task")
-    
-    logging.info(f"Inserting {len(data)} coins into database")
-    
+    logging.info(f"Successfully fetched data for {len(all_data)} coins")
+    logging.info(f"Top 5: {[coin['id'] for coin in all_data[:5]]}")
+
+    # Insert into PostgreSQL
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
     conn = hook.get_conn()
     cursor = conn.cursor()
-    
+
     insert_query = """
         INSERT INTO raw.crypto_prices (coin_id, data, ingested_at)
         VALUES (%s, %s, NOW())
     """
-    
-    inserted_count = 0
-    for coin in data:
-        cursor.execute(insert_query, (coin["id"], json.dumps(coin)))
-        inserted_count += 1
-    
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
+
+    try:
+        for coin in all_data:
+            cursor.execute(insert_query, (coin["id"], json.dumps(coin)))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+    inserted_count = len(all_data)
     logging.info(f"Successfully inserted {inserted_count} records")
+
+    # Push only the count via XCom (lightweight) for downstream logging
+    context["ti"].xcom_push(key="inserted_count", value=inserted_count)
     return inserted_count
 
 
 def log_success(**context):
     """Log successful completion of the DAG."""
     ti = context["ti"]
-    inserted_count = ti.xcom_pull(task_ids="insert_to_db")
+    inserted_count = ti.xcom_pull(
+        key="inserted_count", task_ids="fetch_and_store"
+    )
     logging.info(f"DAG completed successfully. Inserted {inserted_count} records.")
 
 
@@ -100,20 +104,15 @@ with DAG(
     catchup=False,
     tags=["coingecko", "crypto", "ingestion"],
 ) as dag:
-    
-    fetch_prices = PythonOperator(
-        task_id="fetch_prices",
-        python_callable=fetch_crypto_prices,
+
+    fetch_and_store = PythonOperator(
+        task_id="fetch_and_store",
+        python_callable=fetch_and_store_crypto_prices,
     )
-    
-    insert_to_db = PythonOperator(
-        task_id="insert_to_db",
-        python_callable=insert_to_database,
-    )
-    
+
     log_success_task = PythonOperator(
         task_id="log_success",
         python_callable=log_success,
     )
-    
-    fetch_prices >> insert_to_db >> log_success_task
+
+    fetch_and_store >> log_success_task
