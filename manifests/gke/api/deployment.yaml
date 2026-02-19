@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crypto-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crypto-api
+  template:
+    metadata:
+      labels:
+        app: crypto-api
+    spec:
+      containers:
+        - name: crypto-api
+          image: gcr.io/crypto-data-platform-487716/crypto-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DB_HOST
+              value: "postgres.database.svc.cluster.local"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "crypto_data"
+            - name: DB_USER
+              value: "crypto_admin"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: crypto-api-secret
+                  key: db_password
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"

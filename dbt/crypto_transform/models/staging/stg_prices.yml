@@ -10,17 +10,11 @@ models:
           - unique
           - not_null
       - name: coin_id
-        description: "Cryptocurrency identifier"
+        description: "Cryptocurrency identifier (top 100 by market cap)"
         tests:
           - not_null
-          - accepted_values:
-              values: ['bitcoin', 'ethereum', 'solana', 'cardano', 'polkadot']
       - name: price_usd
         description: "Price in USD"
-        tests:
-          - not_null
-      - name: price_eur
-        description: "Price in EUR"
         tests:
           - not_null
       - name: market_cap_usd

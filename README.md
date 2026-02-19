@@ -5,41 +5,15 @@ A production-grade data platform for cryptocurrency market data, demonstrating m
 ## 🎯 Project Overview
 
 This project builds a complete data platform that ingests, transforms, and serves cryptocurrency market data. It showcases skills in data engineering, platform engineering, and cloud infrastructure.
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│    SOURCES              INGESTION            TRANSFORMATION                 │
-│   ┌─────────┐          ┌─────────┐          ┌─────────┐                     │
-│   │CoinGecko│──Batch──▶│ Airflow │─────────▶│   dbt   │                     │
-│   │  (API)  │          │  (DAGs) │          │ (models)│                     │
-│   └─────────┘          └─────────┘          └─────────┘                     │
-│                              │                    │                         │
-│   ┌─────────┐          ┌─────────┐                │                         │
-│   │  Price  │─Stream──▶│  Kafka  │────────────────┤                         │
-│   │ Events  │          │(events) │                │                         │
-│   └─────────┘          └─────────┘                ▼                         │
-│                                            ┌─────────────┐                  │
-│                                            │ PostgreSQL  │                  │
-│                                            │ (warehouse) │                  │
-│                                            └─────────────┘                  │
-│                                                   │                         │
-│                              ┌────────────────────┼────────────────────┐    │
-│                              │                    │                    │    │
-│                              ▼                    ▼                    ▼    │
-│                        ┌─────────┐          ┌─────────┐          ┌───────┐  │
-│                        │ FastAPI │          │Streamlit│          │Grafana│  │
-│                        │  (REST) │          │(dashboard)         │(metrics) │
-│                        └─────────┘          └─────────┘          └───────┘  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+
+![Architecture](docs/images/diagramme.png)
 
 ## 📊 Data Sources
 
-- **CoinGecko API** (Free tier)
-  - Historical prices (BTC, ETH, SOL, and top cryptocurrencies)
-  - Market cap and 24h volume
-  - Top 100 cryptocurrencies ranking
+- **CoinGecko API** (Free tier) - `/coins/markets` endpoint
+  - Top 100 cryptocurrencies by market cap (hourly ingestion)
+  - Price (USD), market cap, 24h volume, 24h change
+  - High/low 24h, circulating supply, total supply
 
 ## 🛠️ Tech Stack
 
@@ -48,8 +22,6 @@ This project builds a complete data platform that ingests, transforms, and serve
 |------------------------|------------------------|
 | **Apache Airflow**     | Workflow orchestration |
 | **dbt**                | Data transformation    |
-| **Apache Kafka**       | Real-time streaming    |
-| **Great Expectations** | Data quality           |
 | **PostgreSQL**         | Data warehouse         |
 
 ### Infrastructure
@@ -57,21 +29,14 @@ This project builds a complete data platform that ingests, transforms, and serve
 |--------------------------|-------------------------|
 | **Docker**               | Containerization        |
 | **Kubernetes (K3d/GKE)** | Container orchestration |
-| **ArgoCD**               | GitOps deployment       |
+| **ArgoCD**               | GitOps deployment (local) |
 | **Terraform**            | Infrastructure as Code  |
-| **GitHub Actions**       | CI/CD pipelines         |
-
-### Observability
-| Tool           | Purpose               |
-|----------------|-----------------------|
-| **Prometheus** | Metrics collection    |
-| **Grafana**    | Dashboards & alerting |
 
 ### Serving Layer
 | Tool          | Purpose               |
 |---------------|-----------------------|
 | **FastAPI**   | REST API              |
-| **Streamlit** | Interactive dashboard |
+| **Grafana**   | Dashboards & monitoring |
 
 ### Languages
 - Python
@@ -82,27 +47,26 @@ This project builds a complete data platform that ingests, transforms, and serve
 
 ## 🚀 Project Phases
 
-### Phase 1: Batch Pipeline (Local) ⏳ In Progress
+### Phase 1: Batch Pipeline (Local) ✅ Done
 - [x] Project setup and documentation
 - [x] K3d cluster + ArgoCD
 - [x] PostgreSQL deployment
-- [ ] Data ingestion from CoinGecko
-- [ ] dbt transformations
-- [ ] Airflow orchestration
-- [ ] FastAPI serving layer
+- [x] Data ingestion from CoinGecko (Airflow DAG)
+- [x] dbt transformations (staging + mart layers)
+- [x] Airflow orchestration (git-sync + KubernetesExecutor)
+- [x] FastAPI serving layer
 
 ### Phase 2: Streaming + Quality 📋 Planned
 - [ ] Apache Kafka deployment
 - [ ] Real-time price streaming
 - [ ] Great Expectations integration
-- [ ] Prometheus + Grafana monitoring
 - [ ] Streamlit dashboard
 
-### Phase 3: Cloud Migration 📋 Planned
-- [ ] Terraform GCP infrastructure
-- [ ] GKE deployment
+### Phase 3: Cloud Migration ✅ Done
+- [x] Terraform GCP infrastructure
+- [x] GKE manifests (postgres + API + Airflow + Grafana)
+- [x] Full GKE production deployment
 - [ ] GitHub Actions CI/CD
-- [ ] Production documentation
 
 ## 📁 Project Structure
 ```
@@ -111,10 +75,33 @@ sanaggar-crypto-data-platform/
 ├── README.md
 ├── docs/
 │   ├── architecture.md
-│   └── setup.md
+│   ├── setup.md
+│   ├── adr/                          # Architecture Decision Records
+│   └── images/                       # Architecture & screenshots
+│
+├── api/                               # FastAPI REST service
+│   ├── Dockerfile
+│   ├── main.py
+│   └── requirements.txt
+│
+├── dags/                              # Airflow DAG definitions
+│   └── crypto_ingestion.py
+│
+├── dbt/crypto_transform/              # dbt data transformation
+│   ├── dbt_project.yml
+│   ├── profiles/
+│   │   └── profiles.yml.example
+│   └── models/
+│       ├── staging/
+│       │   ├── stg_prices.sql
+│       │   ├── stg_prices.yml
+│       │   └── sources.yml
+│       └── mart/
+│           ├── daily_metrics.sql
+│           └── daily_metrics.yml
 │
 ├── manifests/
-│   ├── base/
+│   ├── base/                          # Local K3d cluster
 │   │   ├── argocd/
 │   │   │   └── ingress.yaml
 │   │   ├── postgres/
@@ -122,37 +109,39 @@ sanaggar-crypto-data-platform/
 │   │   │   ├── pvc.yaml
 │   │   │   ├── statefulset.yaml
 │   │   │   ├── service.yaml
-│   │   │   ├── secret.yaml.example
-│   │   │   └── secret.yaml          # NOT IN GIT - create from example
+│   │   │   └── secret.yaml.example
 │   │   ├── airflow/
 │   │   │   ├── values.yaml
 │   │   │   ├── secret.yaml.example
-│   │   │   ├── secret.yaml          # NOT IN GIT - create from example
 │   │   │   ├── webserver-secret.yaml.example
-│   │   │   └── webserver-secret.yaml # NOT IN GIT - create from example
+│   │   │   └── git-secret.yaml.example
+│   │   ├── api/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   └── secret.yaml.example
 │   │   └── test-app/
 │   │       ├── deployment.yaml
 │   │       └── service.yaml
-│   └── overlays/
+│   └── gke/                           # Google Kubernetes Engine
+│       ├── postgres/
+│       │   ├── pvc.yaml
+│       │   ├── statefulset.yaml
+│       │   └── secret.yaml.example
+│       └── api/
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           └── secret.yaml.example
 │
-├── pipelines/
-│   ├── ingestion/
-│   ├── dbt/
-│   └── quality/
+├── scripts/                           # Automated installation
+│   ├── install-local.sh              # One-click local setup (K3d)
+│   └── install-gke.sh               # GKE cloud deployment
 │
-├── apps/
-│   ├── api/
-│   └── dashboard/
+├── .env.example                       # Environment variables template
 │
-├── airflow/
-│   └── dags/
-│
-├── .github/
-│   └── workflows/
-│
-├── scripts/
-│
-└── tests/
+└── terraform/                         # GCP Infrastructure as Code
+    ├── main.tf
+    ├── gke.tf
+    └── terraform.tfvars
 ```
 
 ## 🏃 Quick Start
@@ -162,14 +151,60 @@ sanaggar-crypto-data-platform/
 - kubectl
 - K3d
 - Helm
+- dbt-postgres (`pip install dbt-postgres`)
 
-### 1. Clone and Setup Cluster
+### Automated Installation (Recommended)
+
+The fastest way to get started. The script handles cluster creation, secrets, database setup, and all deployments automatically.
+
 ```bash
 # Clone the repository
 git clone https://github.com/sanaggar/sanaggar-crypto-data-platform.git
 cd sanaggar-crypto-data-platform
 
-# Create K3d cluster
+# Configure your environment
+cp .env.example .env
+nano .env  # Fill in your passwords and GitHub token
+
+# Run the installation
+chmod +x scripts/install-local.sh
+./scripts/install-local.sh
+```
+
+The script will:
+1. Check prerequisites (Docker, kubectl, K3d, Helm)
+2. Create a K3d cluster
+3. Generate all Kubernetes secrets from your `.env`
+4. Deploy PostgreSQL and initialize schemas (`raw`, `staging`, `mart`)
+5. Deploy Airflow with git-sync for DAG loading
+6. Build and deploy the FastAPI service
+7. Deploy Grafana for monitoring
+
+Once complete, access your services:
+```bash
+# Airflow UI
+kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow
+
+# API (Swagger docs at /docs)
+kubectl port-forward svc/crypto-api 8001:8000
+
+# Grafana
+kubectl port-forward svc/grafana 3000:80 -n monitoring
+```
+
+Then run dbt to create the transformation views:
+```bash
+cd dbt/crypto_transform && dbt run
+```
+
+<details>
+<summary><b>Manual Installation (Step by Step)</b></summary>
+
+### 1. Clone and Setup Cluster
+```bash
+git clone https://github.com/sanaggar/sanaggar-crypto-data-platform.git
+cd sanaggar-crypto-data-platform
+
 k3d cluster create crypto-platform \
   --servers 1 \
   --agents 2 \
@@ -189,8 +224,6 @@ kubectl edit configmap argocd-cmd-params-cm -n argocd
 #   server.insecure: "true"
 
 kubectl rollout restart deployment argocd-server -n argocd
-
-# Apply ingress
 kubectl apply -f manifests/base/argocd/ingress.yaml
 
 # Get admin password
@@ -199,117 +232,60 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 Access ArgoCD at: http://localhost:8081
 
-### 3. Configure Secrets (⚠️ IMPORTANT)
+### 3. Configure Secrets
 
-**Secrets are NOT stored in Git for security. You must create them manually.**
+**Secrets are NOT stored in Git. You must create them from the `.example` templates.**
 
-#### PostgreSQL Secret
 ```bash
-# Copy the example file
+# PostgreSQL
 cp manifests/base/postgres/secret.yaml.example manifests/base/postgres/secret.yaml
 
-# Edit with your credentials
-nano manifests/base/postgres/secret.yaml
-```
-
-Example content:
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secret
-  namespace: database
-type: Opaque
-stringData:
-  POSTGRES_USER: your_username
-  POSTGRES_PASSWORD: your_secure_password
-  POSTGRES_DB: crypto_data
-```
-
-#### Airflow Secrets
-```bash
-# Copy the example files
+# Airflow
 cp manifests/base/airflow/secret.yaml.example manifests/base/airflow/secret.yaml
 cp manifests/base/airflow/webserver-secret.yaml.example manifests/base/airflow/webserver-secret.yaml
+cp manifests/base/airflow/git-secret.yaml.example manifests/base/airflow/git-secret.yaml
 
-# Edit with your credentials
-nano manifests/base/airflow/secret.yaml
-nano manifests/base/airflow/webserver-secret.yaml
-```
+# API
+cp manifests/base/api/secret.yaml.example manifests/base/api/secret.yaml
 
-Airflow metadata secret (`secret.yaml`):
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-metadata-secret
-  namespace: airflow
-type: Opaque
-stringData:
-  connection: "postgresql://YOUR_USER:YOUR_PASSWORD@postgres.database.svc.cluster.local:5432/airflow_metadata"
-```
-
-Webserver secret (`webserver-secret.yaml`):
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: airflow-webserver-secret
-  namespace: airflow
-type: Opaque
-stringData:
-  AIRFLOW__WEBSERVER__SECRET_KEY: "your-random-secret-key-here"
+# Edit each file with your credentials
 ```
 
 ### 4. Deploy PostgreSQL
 ```bash
-# Create namespace and apply secret
 kubectl create namespace database
 kubectl apply -f manifests/base/postgres/secret.yaml
 
-# Connect repo to ArgoCD (replace with your GitHub token)
 argocd repo add https://github.com/sanaggar/sanaggar-crypto-data-platform.git \
   --username YOUR_GITHUB_USERNAME \
   --password YOUR_GITHUB_TOKEN
 
-# Create ArgoCD application
 argocd app create postgres \
   --repo https://github.com/sanaggar/sanaggar-crypto-data-platform.git \
   --path manifests/base/postgres \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace database \
   --sync-policy automated
-
-# Verify
-kubectl get pods -n database
 ```
 
 ### 5. Setup PostgreSQL Schemas
 ```bash
-# Connect to PostgreSQL
 kubectl exec -it postgres-0 -n database -- psql -U YOUR_USER -d crypto_data
 
-# Create schemas
 CREATE SCHEMA raw;
 CREATE SCHEMA staging;
 CREATE SCHEMA mart;
-
-# Create Airflow metadata database
 CREATE DATABASE airflow_metadata;
-
-# Verify
-\dn
 \q
 ```
 
 ### 6. Deploy Airflow
 ```bash
-# Create namespace and apply secrets
 kubectl create namespace airflow
 kubectl apply -f manifests/base/airflow/secret.yaml
 kubectl apply -f manifests/base/airflow/webserver-secret.yaml
+kubectl apply -f manifests/base/airflow/git-secret.yaml
 
-# Install with Helm
 helm repo add apache-airflow https://airflow.apache.org
 helm repo update
 
@@ -317,22 +293,28 @@ helm install airflow apache-airflow/airflow \
   --namespace airflow \
   --values manifests/base/airflow/values.yaml \
   --timeout 15m
-
-# Create admin user (choose your own credentials)
-kubectl exec -it deployment/airflow-api-server -n airflow -- \
-  airflow users create \
-  --username YOUR_USERNAME \
-  --firstname YOUR_FIRSTNAME \
-  --lastname YOUR_LASTNAME \
-  --role Admin \
-  --email YOUR_EMAIL \
-  --password YOUR_PASSWORD
 ```
 
-Access Airflow at: http://localhost:8080 (requires port-forward)
+### 7. Setup dbt
 ```bash
-kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow
+cp dbt/crypto_transform/profiles/profiles.yml.example dbt/crypto_transform/profiles/profiles.yml
+nano dbt/crypto_transform/profiles/profiles.yml
+
+kubectl port-forward svc/postgres 5432:5432 -n database
+cd dbt/crypto_transform && dbt run
 ```
+
+### 8. Deploy FastAPI
+```bash
+docker build -t crypto-api:latest api/
+k3d image import crypto-api:latest -c crypto-platform
+
+kubectl apply -f manifests/base/api/secret.yaml
+kubectl apply -f manifests/base/api/deployment.yaml
+kubectl apply -f manifests/base/api/service.yaml
+```
+
+</details>
 
 ## 🔐 Security Notes
 
@@ -340,6 +322,16 @@ kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow
 - **Use `.example` files as templates** - Copy and fill with your own values
 - **Rotate credentials regularly** - Especially before making repo public
 - **Use strong passwords** - Mix of uppercase, lowercase, numbers, and symbols
+
+## 📸 Screenshots
+
+| Airflow DAG | FastAPI Swagger |
+|:-----------:|:---------------:|
+| ![Airflow](docs/images/airflow.png) | ![API](docs/images/api_swagger.png) |
+
+| Grafana Dashboard | Kubernetes Pods |
+|:-----------------:|:---------------:|
+| ![Grafana](docs/images/grafana.png) | ![K8s](docs/images/k8s_pods_status.png) |
 
 ## 📚 Documentation
 
@@ -351,7 +343,7 @@ kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow
 
 This project demonstrates proficiency in:
 
-- **Data Engineering**: ETL/ELT pipelines, batch and stream processing
+- **Data Engineering**: ETL/ELT pipelines, batch processing
 - **Platform Engineering**: Kubernetes, GitOps, containerization
 - **Cloud Engineering**: IaC with Terraform, GCP services
 - **DevOps**: CI/CD, monitoring, observability

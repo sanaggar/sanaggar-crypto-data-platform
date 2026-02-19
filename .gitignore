@@ -115,3 +115,4 @@ google-cloud-cli-linux-x86_64.tar.gz
 manifests/base/api/secret.yaml
 manifests/gke/api/secret.yaml
 manifests/gke/postgres/secret.yaml
+.env
