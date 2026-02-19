@@ -109,3 +109,9 @@ manifests/base/airflow/webserver-secret.yaml
 manifests/base/airflow/git-secret.yaml
 dbt/crypto_transform/profiles/profiles.yml
 dbt/crypto_transform/profiles/.user.yml
+manifests/base/api/secret.yaml
+google-cloud-sdk/
+google-cloud-cli-linux-x86_64.tar.gz
+manifests/base/api/secret.yaml
+manifests/gke/api/secret.yaml
+manifests/gke/postgres/secret.yaml
