@@ -140,7 +140,7 @@ sanaggar-crypto-data-platform/
 └── terraform/                         # GCP Infrastructure as Code
     ├── main.tf
     ├── gke.tf
-    └── terraform.tfvars
+    └── terraform.tfvars.example       # Terraform variables template
 ```
 
 ## 🏃 Quick Start
@@ -318,8 +318,11 @@ kubectl apply -f manifests/base/api/service.yaml
 
 ## 🔐 Security Notes
 
-- **Never commit secrets to Git** - All sensitive files are in `.gitignore`
+- **Never commit secrets to Git** - All sensitive files (`.env`, `*.tfvars`, secret YAML) are in `.gitignore`
 - **Use `.example` files as templates** - Copy and fill with your own values
+- **Environment variables are required** - The API will fail to start if `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, or `DB_PASSWORD` are not set
+- **Containers run as non-root** - The API Dockerfile and K8s manifests enforce non-root execution
+- **Error messages are sanitized** - Internal exceptions are logged server-side, never exposed to API clients
 - **Rotate credentials regularly** - Especially before making repo public
 - **Use strong passwords** - Mix of uppercase, lowercase, numbers, and symbols
 

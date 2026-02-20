@@ -59,6 +59,9 @@ great_expectations/uncommitted/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
 .terraform.lock.hcl
 
 # Kubernetes

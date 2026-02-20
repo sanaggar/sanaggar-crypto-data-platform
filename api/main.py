@@ -8,14 +8,17 @@ from contextlib import asynccontextmanager
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import logging
 
-# Database connection settings
+logger = logging.getLogger(__name__)
+
+# Database connection settings — all values required via environment variables
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": os.getenv("DB_PORT", "5432"),
-    "dbname": os.getenv("DB_NAME", "crypto_data"),
-    "user": os.getenv("DB_USER", "crypto_admin"),
-    "password": os.getenv("DB_PASSWORD", "crypto_secret_2026"),
+    "host": os.environ["DB_HOST"],
+    "port": os.environ["DB_PORT"],
+    "dbname": os.environ["DB_NAME"],
+    "user": os.environ["DB_USER"],
+    "password": os.environ["DB_PASSWORD"],
 }
 
 
@@ -26,13 +29,14 @@ def get_db_connection():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Test database connection on startup."""
+    """Test database connection on startup — fail fast if DB is unreachable."""
     try:
         conn = get_db_connection()
         conn.close()
-        print("✅ Database connection successful")
+        logger.info("Database connection successful")
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        logger.error("Database connection failed: %s", e)
+        raise
     yield
 
 
@@ -53,6 +57,7 @@ def root():
 @app.get("/prices")
 def get_prices():
     """Get latest prices for all cryptocurrencies."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -70,15 +75,19 @@ def get_prices():
         """)
         prices = cursor.fetchall()
         cursor.close()
-        conn.close()
         return {"data": prices, "count": len(prices)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error fetching prices: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.get("/prices/{coin_id}")
 def get_price_by_coin(coin_id: str):
     """Get latest price for a specific cryptocurrency."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -98,21 +107,25 @@ def get_price_by_coin(coin_id: str):
         """, (coin_id,))
         price = cursor.fetchone()
         cursor.close()
-        conn.close()
-        
+
         if not price:
             raise HTTPException(status_code=404, detail=f"Coin '{coin_id}' not found")
-        
+
         return {"data": price}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error fetching price for %s: %s", coin_id, e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.get("/metrics/daily")
 def get_daily_metrics():
     """Get daily aggregated metrics."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -131,15 +144,19 @@ def get_daily_metrics():
         """)
         metrics = cursor.fetchall()
         cursor.close()
-        conn.close()
         return {"data": metrics, "count": len(metrics)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error fetching daily metrics: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.get("/metrics/daily/{coin_id}")
 def get_daily_metrics_by_coin(coin_id: str):
     """Get daily metrics for a specific cryptocurrency."""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -159,13 +176,16 @@ def get_daily_metrics_by_coin(coin_id: str):
         """, (coin_id,))
         metrics = cursor.fetchall()
         cursor.close()
-        conn.close()
-        
+
         if not metrics:
             raise HTTPException(status_code=404, detail=f"No metrics found for '{coin_id}'")
-        
+
         return {"data": metrics, "count": len(metrics)}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error fetching daily metrics for %s: %s", coin_id, e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        if conn:
+            conn.close()

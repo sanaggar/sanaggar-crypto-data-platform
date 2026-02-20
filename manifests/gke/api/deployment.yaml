@@ -13,9 +13,17 @@ spec:
       labels:
         app: crypto-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
       containers:
         - name: crypto-api
           image: gcr.io/crypto-data-platform-487716/crypto-api:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8000
           env:
