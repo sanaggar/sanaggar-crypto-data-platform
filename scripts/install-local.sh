@@ -24,6 +24,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Ensure script is run from project root
+if [ ! -f "scripts/install-local.sh" ]; then
+    echo -e "${RED}Error: Please run this script from the project root directory${NC}"
+    echo "  cd /path/to/sanaggar-crypto-data-platform && ./scripts/install-local.sh"
+    exit 1
+fi
+
 echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}  Crypto Data Platform - Installation   ${NC}"
 echo -e "${GREEN}=========================================${NC}"
@@ -79,9 +86,10 @@ echo
 # -----------------------------------------------------------------------------
 echo -e "${YELLOW}[3/8] Creating K3d cluster...${NC}"
 
-if k3d cluster list | grep -q "crypto-platform"; then
+# Force delete if cluster or leftover containers exist
+if k3d cluster list | grep -q "crypto-platform" || docker ps -a --filter name=k3d-crypto-platform -q 2>/dev/null | grep -q .; then
     echo "  Cluster already exists, deleting..."
-    k3d cluster delete crypto-platform
+    k3d cluster delete crypto-platform 2>/dev/null || true
 fi
 
 k3d cluster create crypto-platform \
@@ -124,18 +132,21 @@ kubectl create secret generic airflow-secret \
     --from-literal=AIRFLOW_ADMIN_PASSWORD=$AIRFLOW_ADMIN_PASSWORD \
     --dry-run=client -o yaml | kubectl apply -f -
 
-# Git secret for Airflow (if provided)
-if [ -n "$GITHUB_TOKEN" ]; then
+# Git secret for Airflow (if provided and not a placeholder)
+if [ -n "$GITHUB_TOKEN" ] && ! echo "$GITHUB_TOKEN" | grep -q "your_.*_here"; then
     kubectl create secret generic airflow-git-secret \
         --namespace airflow \
         --from-literal=GITSYNC_USERNAME=$GITHUB_USERNAME \
         --from-literal=GITSYNC_PASSWORD=$GITHUB_TOKEN \
+        --from-literal=GIT_SYNC_USERNAME=$GITHUB_USERNAME \
+        --from-literal=GIT_SYNC_PASSWORD=$GITHUB_TOKEN \
         --dry-run=client -o yaml | kubectl apply -f -
 fi
 
-# API secret
+# API secret (must include both db_user and db_password as referenced by deployment.yaml)
 kubectl create secret generic crypto-api-secret \
     --namespace default \
+    --from-literal=db_user=$POSTGRES_USER \
     --from-literal=db_password=$POSTGRES_PASSWORD \
     --dry-run=client -o yaml | kubectl apply -f -
 
@@ -188,11 +199,94 @@ kubectl create secret generic airflow-webserver-secret \
     --from-literal=webserver-secret-key=$(openssl rand -hex 32) \
     --dry-run=client -o yaml | kubectl apply -f -
 
+# Create Fernet key for encryption (auto-generate if not set or placeholder)
+if [ -z "$AIRFLOW_FERNET_KEY" ] || echo "$AIRFLOW_FERNET_KEY" | grep -q "your_.*_here"; then
+    FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || openssl rand -base64 32)
+else
+    FERNET_KEY=$AIRFLOW_FERNET_KEY
+fi
+kubectl create secret generic airflow-fernet-key \
+    --namespace airflow \
+    --from-literal=fernet-key="$FERNET_KEY" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+# URL-encode password for use in connection string (special chars like !@#$ break URIs)
+ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${POSTGRES_PASSWORD}', safe=''))")
+
+# Create metadata database connection secret (required by Helm chart)
+kubectl create secret generic airflow-metadata-secret \
+    --namespace airflow \
+    --from-literal=connection="postgresql://${POSTGRES_USER}:${ENCODED_PASSWORD}@postgres.database.svc.cluster.local:5432/airflow_metadata" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+# Run database migrations manually before Helm install
+# (The Helm hook for migrations can fail silently on some chart versions)
+# Must set FAB auth manager to trigger provider-specific migrations (User/Role tables)
+echo "  Running Airflow database migrations..."
+AIRFLOW_DB_URI="postgresql://${POSTGRES_USER}:${ENCODED_PASSWORD}@postgres.database.svc.cluster.local:5432/airflow_metadata"
+
+# Pre-pull the Airflow image to avoid kubectl run timeout during first pull
+echo "  Pulling Airflow image (this may take a few minutes on first run)..."
+kubectl run airflow-image-pull \
+    --rm -i --restart=Never \
+    --namespace airflow \
+    --pod-running-timeout=5m \
+    --image=apache/airflow:3.1.7 \
+    --command -- echo "Image ready"
+
+kubectl run airflow-db-migrate \
+    --rm -i --restart=Never \
+    --namespace airflow \
+    --pod-running-timeout=5m \
+    --image=apache/airflow:3.1.7 \
+    --env="AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW_DB_URI}" \
+    --env="AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager" \
+    -- airflow db migrate
+
+echo "  ✓ Database migrations complete"
+
+# Build Helm extra args for gitSync (only if GITHUB_TOKEN is provided)
+HELM_GITSYNC_ARGS=""
+if [ -n "$GITHUB_TOKEN" ] && ! echo "$GITHUB_TOKEN" | grep -q "your_.*_here"; then
+    echo "  Git credentials found, enabling DAG sync from GitHub..."
+    HELM_GITSYNC_ARGS="\
+        --set dags.gitSync.enabled=true \
+        --set dags.gitSync.repo=https://github.com/sanaggar/sanaggar-crypto-data-platform.git \
+        --set dags.gitSync.branch=main \
+        --set dags.gitSync.subPath=dags \
+        --set dags.gitSync.wait=60 \
+        --set dags.gitSync.credentialsSecret=airflow-git-secret"
+else
+    echo "  No GITHUB_TOKEN set, DAGs will be loaded manually..."
+    HELM_GITSYNC_ARGS="--set dags.gitSync.enabled=false"
+fi
+
 helm upgrade --install airflow apache-airflow/airflow \
     --namespace airflow \
     --values manifests/base/airflow/values.yaml \
+    --set fernetKeySecretName=airflow-fernet-key \
+    --set migrateDatabaseJob.enabled=false \
+    --set createUserJob.enabled=false \
+    $HELM_GITSYNC_ARGS \
     --timeout 10m \
     --wait
+
+# If no gitSync, copy DAGs directly into the scheduler pod
+if { [ -z "$GITHUB_TOKEN" ] || echo "$GITHUB_TOKEN" | grep -q "your_.*_here"; } && [ -d "dags" ]; then
+    echo "  Copying local DAGs into Airflow scheduler..."
+    SCHEDULER_POD=$(kubectl get pod -n airflow -l component=scheduler -o jsonpath='{.items[0].metadata.name}')
+    kubectl cp dags/ airflow/$SCHEDULER_POD:/opt/airflow/dags/
+fi
+
+# Create Airflow admin user
+echo "  Creating Airflow admin user..."
+kubectl exec -n airflow deployment/airflow-scheduler -- airflow users create \
+    --username "${AIRFLOW_ADMIN_USER:-admin}" \
+    --firstname Admin \
+    --lastname User \
+    --role Admin \
+    --email admin@example.com \
+    --password "$AIRFLOW_ADMIN_PASSWORD" 2>/dev/null || true
 
 # Create Airflow PostgreSQL connection
 kubectl exec -n airflow deployment/airflow-scheduler -- airflow connections add postgres_crypto \
@@ -230,6 +324,43 @@ echo "  ✓ API and Grafana deployed"
 echo
 
 # -----------------------------------------------------------------------------
+# Setup dbt and run models
+# -----------------------------------------------------------------------------
+echo -e "${YELLOW}[Post-install] Setting up dbt...${NC}"
+
+mkdir -p ~/.dbt
+cat > ~/.dbt/profiles.yml <<DBTEOF
+crypto_transform:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+      dbname: ${POSTGRES_DB}
+      schema: public
+      threads: 4
+DBTEOF
+echo "  ✓ dbt profile generated (~/.dbt/profiles.yml)"
+
+if command -v dbt &> /dev/null; then
+    echo "  Running dbt models (requires port-forward to postgres)..."
+    kubectl port-forward svc/postgres 5432:5432 -n database &>/dev/null &
+    PF_PID=$!
+    sleep 2
+    (cd dbt/crypto_transform && dbt run) || echo -e "${YELLOW}  dbt run failed - you can retry manually after port-forwarding postgres${NC}"
+    kill $PF_PID 2>/dev/null || true
+else
+    echo -e "${YELLOW}  dbt not installed, skipping. Run manually:${NC}"
+    echo "    kubectl port-forward svc/postgres 5432:5432 -n database &"
+    echo "    cd dbt/crypto_transform && dbt run"
+fi
+
+echo
+
+# -----------------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------------
 echo -e "${GREEN}=========================================${NC}"
@@ -250,7 +381,6 @@ echo "  API:      kubectl port-forward svc/crypto-api 8001:8000"
 echo "            http://localhost:8001/docs"
 echo
 echo "Next steps:"
-echo "  1. Run dbt to create views: cd dbt/crypto_transform && dbt run"
-echo "  2. Trigger the DAG in Airflow to ingest data"
-echo "  3. Configure Grafana data source (PostgreSQL)"
+echo "  1. Trigger the DAG in Airflow to ingest data"
+echo "  2. Configure Grafana data source (PostgreSQL)"
 echo

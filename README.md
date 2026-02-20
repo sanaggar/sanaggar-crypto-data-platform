@@ -89,8 +89,7 @@ sanaggar-crypto-data-platform/
 │
 ├── dbt/crypto_transform/              # dbt data transformation
 │   ├── dbt_project.yml
-│   ├── profiles/
-│   │   └── profiles.yml.example
+│   ├── profiles.yml.example          # dbt profile template
 │   └── models/
 │       ├── staging/
 │       │   ├── stg_prices.sql
@@ -155,7 +154,7 @@ sanaggar-crypto-data-platform/
 
 ### Automated Installation (Recommended)
 
-The fastest way to get started. The script handles cluster creation, secrets, database setup, and all deployments automatically.
+The fastest way to get started. A single script handles everything: cluster creation, secrets, database setup, migrations, deployments, and dbt transformations.
 
 ```bash
 # Clone the repository
@@ -164,7 +163,7 @@ cd sanaggar-crypto-data-platform
 
 # Configure your environment
 cp .env.example .env
-nano .env  # Fill in your passwords and GitHub token
+nano .env  # Fill in the required passwords (GitHub token is optional)
 
 # Run the installation
 chmod +x scripts/install-local.sh
@@ -176,25 +175,26 @@ The script will:
 2. Create a K3d cluster
 3. Generate all Kubernetes secrets from your `.env`
 4. Deploy PostgreSQL and initialize schemas (`raw`, `staging`, `mart`)
-5. Deploy Airflow with git-sync for DAG loading
-6. Build and deploy the FastAPI service
-7. Deploy Grafana for monitoring
+5. Run Airflow database migrations (core + FAB auth)
+6. Deploy Airflow (with git-sync if GitHub token is provided, otherwise copies local DAGs)
+7. Create the Airflow admin user and PostgreSQL connection
+8. Build and deploy the FastAPI service
+9. Deploy Grafana for monitoring
+10. Generate `~/.dbt/profiles.yml` and run dbt transformations
 
 Once complete, access your services:
 ```bash
 # Airflow UI
 kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow
+# -> http://localhost:8080 (user: admin / password: from .env)
 
-# API (Swagger docs at /docs)
+# API (Swagger docs)
 kubectl port-forward svc/crypto-api 8001:8000
+# -> http://localhost:8001/docs
 
 # Grafana
 kubectl port-forward svc/grafana 3000:80 -n monitoring
-```
-
-Then run dbt to create the transformation views:
-```bash
-cd dbt/crypto_transform && dbt run
+# -> http://localhost:3000 (user: admin / password: from .env)
 ```
 
 <details>

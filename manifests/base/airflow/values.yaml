@@ -5,6 +5,9 @@
 # Use Kubernetes executor (each task runs as a separate pod)
 executor: "KubernetesExecutor"
 
+# Webserver secret key (created by install script)
+webserverSecretKeySecretName: airflow-webserver-secret
+
 # Web interface
 webserver:
   replicas: 1
@@ -51,12 +54,7 @@ redis:
 data:
   metadataSecretName: airflow-metadata-secret
 
-# GitSync to load DAGs from our Git repository
+# DAGs configuration - gitSync is configured dynamically by install script
 dags:
-  gitSync:
-    enabled: true
-    repo: https://github.com/sanaggar/sanaggar-crypto-data-platform.git
-    branch: main
-    subPath: "dags"
-    wait: 60
-    credentialsSecret: airflow-git-secret
+  persistence:
+    enabled: false
