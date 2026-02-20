@@ -227,7 +227,7 @@ echo -e "${GREEN}  GKE Installation Complete!            ${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo
 echo "Access:"
-echo "  Airflow: kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow"
+echo "  Airflow: kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow"
 echo "           http://localhost:8080 (user: admin / password: from .env)"
 echo "  Grafana: kubectl port-forward svc/grafana 3000:80 -n monitoring"
 echo "           http://localhost:3000 (user: admin / password: from .env)"

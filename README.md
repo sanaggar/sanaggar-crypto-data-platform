@@ -185,7 +185,7 @@ The script will:
 Once complete, access your services:
 ```bash
 # Airflow UI
-kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow
+kubectl port-forward svc/airflow-api-server 8080:8080 -n airflow
 # -> http://localhost:8080 (user: admin / password: from .env)
 
 # API (Swagger docs)
